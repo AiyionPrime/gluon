@@ -20,11 +20,30 @@ shell-unescape = $(subst @1,@,$(subst @2,$(newline),$(1)))
 shell-verbatim = $(call shell-unescape,$(call shell-escape,$(1)))
 
 
+ifeq (${GLUON_TEST_PKG},1)
+
+define GluonCheckSite
+printf "%s" "Testing check_site.lua: "
+export IPKG_INSTROOT=/
+cat > /tmp/check_site_lib.lua <<'END__GLUON__CHECK__SITE__LIB'
+$(call shell-verbatim,cat '${TOPDIR}/../scripts/check_site.lua')
+END__GLUON__CHECK__SITE__LIB
+lua /tmp/check_site_lib.lua <<'END__GLUON__CHECK__SITE'
+$(call shell-verbatim,cat '$(1)')
+END__GLUON__CHECK__SITE
+rm /tmp/check_site_lib.lua
+echo ok
+endef
+
+else
+
 define GluonCheckSite
 [ -z "$$IPKG_INSTROOT" ] || "${TOPDIR}/staging_dir/hostpkg/bin/lua" "${TOPDIR}/../scripts/check_site.lua" <<'END__GLUON__CHECK__SITE'
 $(call shell-verbatim,cat '$(1)')
 END__GLUON__CHECK__SITE
 endef
+
+endif
 
 GLUON_SUPPORTED_LANGS := de fr
 GLUON_LANG_de := German

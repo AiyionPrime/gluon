@@ -82,7 +82,7 @@ while [ $# -gt 0 ]; do
 	}
 
 	make TOPDIR="${topdir}" -C "${pkgdir}" clean
-	make TOPDIR="${topdir}" -C "${pkgdir}" compile
+	make TOPDIR="${topdir}" GLUON_TEST_PKG=1 -C "${pkgdir}" compile
 
 	if [ "$build_only" -eq 1 ]; then
 		continue

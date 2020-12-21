@@ -1,4 +1,3 @@
-local cjson = require 'cjson'
 
 local function config_error(src, ...)
 	error(src .. ' error: ' .. string.format(...), 0)
@@ -8,10 +7,16 @@ local has_domains = (os.execute('ls -d "$IPKG_INSTROOT"/lib/gluon/domains/ >/dev
 
 
 local function load_json(filename)
-	local f = assert(io.open(filename))
-	local json = cjson.decode(f:read('*a'))
-	f:close()
-	return json
+	local status, cjson = pcall(require, 'cjson')
+	if status then
+		local f = assert(io.open(filename))
+		local json = cjson.decode(f:read('*a'))
+		f:close()
+		return json
+	else
+		local jsonc = require 'jsonc'
+		return jsonc.load(filename)
+	end
 end
 
 
