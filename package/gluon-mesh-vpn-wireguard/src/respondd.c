@@ -213,10 +213,23 @@ static struct json_object * get_wgpeerselector(void) {
 	return ret;
 }
 
+static struct json_object * get_wireguard(void) {
+	bool wg_enabled = wireguard_enabled();
+	bool wgp_enabled = wgpeerselector_enabled();
+
+	struct json_object *ret = json_object_new_object();
+	json_object_object_add(ret, "version", get_wireguard_version());
+	json_object_object_add(ret, "enabled", json_object_new_boolean(enabled));
+	if (wg_enabled  && wgp_enabled && !get_pubkey_privacy())
+		json_object_object_add(ret, "public_key", get_wireguard_public_key());
+	return ret;
+}
+
 static struct json_object * respondd_provider_nodeinfo(void) {
 	struct json_object *ret = json_object_new_object();
 
 	struct json_object *software = json_object_new_object();
+	json_object_object_add(software, "wireguard", get_wireguard());
 	json_object_object_add(software, "wgpeerselector", get_wgpeerselector());
 	json_object_object_add(ret, "software", software);
 
