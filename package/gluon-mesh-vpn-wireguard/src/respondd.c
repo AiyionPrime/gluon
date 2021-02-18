@@ -208,8 +208,6 @@ static struct json_object * get_wgpeerselector(void) {
 	bool enabled = wgpeerselector_enabled();
 	json_object_object_add(ret, "version", get_wgpeerselector_version());
 	json_object_object_add(ret, "enabled", json_object_new_boolean(enabled));
-	if (enabled && !get_pubkey_privacy())
-		json_object_object_add(ret, "public_key", get_wireguard_public_key());
 	return ret;
 }
 
