@@ -84,7 +84,7 @@ static bool wireguard_enabled(void) {
 	readable = fread(buf, 1, sizeof(buf), fd);
 	pclose(fd);
 
-	return (readble > 0);
+	return (readable > 0);
 }
 
 static struct json_object * get_wireguard_public_key(void) {
@@ -201,11 +201,13 @@ disabled:
 	uci_free_context(ctx);
 
 disabled_nofree:
-	return enabled
+	return enabled;
 }
 
 static struct json_object * get_wgpeerselector(void) {
 	bool enabled = wgpeerselector_enabled();
+
+	struct json_object *ret = json_object_new_object();
 	json_object_object_add(ret, "version", get_wgpeerselector_version());
 	json_object_object_add(ret, "enabled", json_object_new_boolean(enabled));
 	return ret;
@@ -217,7 +219,7 @@ static struct json_object * get_wireguard(void) {
 
 	struct json_object *ret = json_object_new_object();
 	json_object_object_add(ret, "version", get_wireguard_version());
-	json_object_object_add(ret, "enabled", json_object_new_boolean(enabled));
+	json_object_object_add(ret, "enabled", json_object_new_boolean(wg_enabled));
 	if (wg_enabled  && wgp_enabled && !get_pubkey_privacy())
 		json_object_object_add(ret, "public_key", get_wireguard_public_key());
 	return ret;
