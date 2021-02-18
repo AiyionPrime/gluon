@@ -75,6 +75,18 @@ static struct json_object * get_wgpeerselector_version(void) {
 	return ret;
 }
 
+static bool wireguard_enabled(void) {
+	FILE *fd = popen("grep '^wireguard ' /proc/modules", "r");
+	if (!fd)
+		return false;
+	char buf[4];
+	size_t readable=0;
+	readable = fread(buf, 1, sizeof(buf), fd);
+	pclose(fd);
+
+	return (readble > 0);
+}
+
 static struct json_object * get_wireguard_public_key(void) {
 	FILE *f = popen("exec /lib/gluon/mesh-vpn/wireguard_pubkey.sh", "r");
 	if (!f)
