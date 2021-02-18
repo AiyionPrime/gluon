@@ -31,6 +31,7 @@
 #include <libgluonutil.h>
 #include <uci.h>
 
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -98,6 +99,45 @@ static struct json_object * get_wireguard_public_key(void) {
 	}
 
 	return gluonutil_wrap_and_free_string(line);
+}
+
+static struct json_object * get_wireguard_version(void) {
+	FILE *f = popen("exec wg -v", "r");
+	if (!f)
+		return NULL;
+
+	char *line = NULL;
+	size_t len = 0;
+
+	ssize_t r = getline(&line, &len, f);
+
+	pclose(f);
+
+	if (r >= 0) {
+		len = strlen(line); /* The len given by getline is the buffer size, not the string length */
+
+		if (len && line[len-1] == '\n')
+			line[len-1] = 0;
+	}
+	else {
+		free(line);
+		line = NULL;
+	}
+
+	const char *version = line;
+	if (strncmp(version, "wireguard-tools ", 16) == 0)
+		version += 16;
+
+	for (int i = 0; i < len; i++){
+		if (isspace(line[i])) {
+			 line[i] = 0;
+			 break;
+		}
+	}
+
+	struct json_object *ret = gluonutil_wrap_string(version);
+	free(line);
+	return ret;
 }
 
 static bool get_pubkey_privacy(void) {
