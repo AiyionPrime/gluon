@@ -42,14 +42,14 @@
 
 #include "libubus.h"
 
-
-static struct json_object * get_wgpeerselector_version(void) {
-	FILE *f = popen("exec wgpeerselector --version", "r");
+static struct json_object * stdout_read(const char *cmd, const char *skip, bool oneword) {
+	FILE *f = popen(cmd, "r");
 	if (!f)
 		return NULL;
 
 	char *line = NULL;
 	size_t len = 0;
+	size_t skiplen = strlen(skip);
 
 	ssize_t r = getline(&line, &len, f);
 
@@ -67,12 +67,33 @@ static struct json_object * get_wgpeerselector_version(void) {
 	}
 
 	const char *version = line;
-	if (strncmp(version, "wgpeerselector ", 15) == 0)
-		version += 15;
+	if (strncmp(version, cmd, skiplen) == 0)
+		version += skiplen;
+
+	if (oneword) {
+		for (int i = 0; i < len; i++){
+			if (isspace(line[i])) {
+				 line[i] = 0;
+				 break;
+			}
+		}
+	}
 
 	struct json_object *ret = gluonutil_wrap_string(version);
 	free(line);
 	return ret;
+}
+
+static struct json_object * get_wgpeerselector_version(void) {
+	return stdout_read("exec wgpeerselector --version", "wgpeerselector ", false);
+}
+
+static struct json_object * get_wireguard_public_key(void) {
+	return stdout_read("exec /lib/gluon/mesh-vpn/wireguard_pubkey.sh", "", false);
+}
+
+static struct json_object * get_wireguard_version(void) {
+	return stdout_read("exec wg -v", "wireguard-tools ", true);
 }
 
 static bool wireguard_enabled(void) {
@@ -85,71 +106,6 @@ static bool wireguard_enabled(void) {
 	pclose(fd);
 
 	return (readable > 0);
-}
-
-static struct json_object * get_wireguard_public_key(void) {
-	FILE *f = popen("exec /lib/gluon/mesh-vpn/wireguard_pubkey.sh", "r");
-	if (!f)
-		return NULL;
-
-	char *line = NULL;
-	size_t len = 0;
-
-	ssize_t r = getline(&line, &len, f);
-
-	pclose(f);
-
-	if (r >= 0) {
-		len = strlen(line); /* The len given by getline is the buffer size, not the string length */
-
-		if (len && line[len-1] == '\n')
-			line[len-1] = 0;
-	}
-	else {
-		free(line);
-		line = NULL;
-	}
-
-	return gluonutil_wrap_and_free_string(line);
-}
-
-static struct json_object * get_wireguard_version(void) {
-	FILE *f = popen("exec wg -v", "r");
-	if (!f)
-		return NULL;
-
-	char *line = NULL;
-	size_t len = 0;
-
-	ssize_t r = getline(&line, &len, f);
-
-	pclose(f);
-
-	if (r >= 0) {
-		len = strlen(line); /* The len given by getline is the buffer size, not the string length */
-
-		if (len && line[len-1] == '\n')
-			line[len-1] = 0;
-	}
-	else {
-		free(line);
-		line = NULL;
-	}
-
-	const char *version = line;
-	if (strncmp(version, "wireguard-tools ", 16) == 0)
-		version += 16;
-
-	for (int i = 0; i < len; i++){
-		if (isspace(line[i])) {
-			 line[i] = 0;
-			 break;
-		}
-	}
-
-	struct json_object *ret = gluonutil_wrap_string(version);
-	free(line);
-	return ret;
 }
 
 static bool get_pubkey_privacy(void) {
