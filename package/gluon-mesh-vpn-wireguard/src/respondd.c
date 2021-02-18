@@ -176,7 +176,7 @@ end:
 	return ret;
 }
 
-static struct json_object * get_wgpeerselector(void) {
+static bool wgpeerselector_enabled(void) {
 	bool enabled = true;
 	struct json_object *ret = json_object_new_object();
 
@@ -201,6 +201,11 @@ disabled:
 	uci_free_context(ctx);
 
 disabled_nofree:
+	return enabled
+}
+
+static struct json_object * get_wgpeerselector(void) {
+	bool enabled = wgpeerselector_enabled();
 	json_object_object_add(ret, "version", get_wgpeerselector_version());
 	json_object_object_add(ret, "enabled", json_object_new_boolean(enabled));
 	if (enabled && !get_pubkey_privacy())
