@@ -66,26 +66,25 @@ static struct json_object * stdout_read(const char *cmd, const char *skip, bool 
 		line = NULL;
 	}
 
-	const char *version = line;
-	if (strncmp(version, cmd, skiplen) == 0)
-		version += skiplen;
+	const char *content = line;
+	if (strncmp(content, skip, skiplen) == 0)
+		content += skiplen;
 
 	if (oneword) {
 		for (int i = 0; i < len; i++){
 			if (isspace(line[i])) {
 				 line[i] = 0;
-				 break;
 			}
 		}
 	}
 
-	struct json_object *ret = gluonutil_wrap_string(version);
+	struct json_object *ret = gluonutil_wrap_string(content);
 	free(line);
 	return ret;
 }
 
 static struct json_object * get_wgpeerselector_version(void) {
-	return stdout_read("exec wgpeerselector --version", "wgpeerselector ", false);
+	return stdout_read("exec wgpeerselector --version", "wgpeerselector ", true);
 }
 
 static struct json_object * get_wireguard_public_key(void) {
