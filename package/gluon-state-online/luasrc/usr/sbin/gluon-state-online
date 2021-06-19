@@ -1,0 +1,171 @@
+#!/usr/bin/lua
+
+local unistd = require 'posix.unistd'
+local stat = require 'posix.sys.stat'
+local posix_fcntl = require 'posix.fcntl'
+local wait = require 'posix.sys.wait'
+
+local state_dir = "/var/gluon/state/"
+
+local neighbour_flag = state_dir .. "has_neighbours"
+local route4_flag    = state_dir .. "default_route_4"
+local route6_flag    = state_dir .. "default_route_6"
+
+-- this function will be gone soon
+local function popen2(path, ...)
+	local r0, w0 = unistd.pipe()
+	local r1, w1 = unistd.pipe()
+
+	local pid = unistd.fork()
+
+	if pid < 0 then
+		return nil
+	elseif pid == 0 then
+		unistd.close(w0)
+		unistd.close(r1)
+
+		local null = posix_fcntl.open('/dev/null', posix_fcntl.O_WRONLY)
+		unistd.dup2(null, unistd.STDERR_FILENO)
+		if null > 2 then
+			unistd.close(null)
+		end
+
+		unistd.dup2(r0, unistd.STDIN_FILENO)
+		unistd.dup2(w1, unistd.STDOUT_FILENO)
+
+		unistd.close(r0)
+		unistd.close(w1)
+
+		unistd.execp(path, ...)
+		unistd._exit(127)
+	end
+
+	unistd.close(r0)
+	unistd.close(w1)
+
+	return pid, w0, r1
+end
+
+-- Consume and close the given pipe.
+local function drain_pipe(given_pipe)
+	local drop = unistd.read(given_pipe, 512)
+	while drop and #drop > 0 do
+		drop = unistd.read(given_pipe, 512)
+	end
+	unistd.close(given_pipe)
+end
+
+-- Search a pipes contents for a seach-token.
+-- Consume and close the pipe in the process.
+-- Return true on find, false on failure.
+local function stream_search(given_pipe, search_token)
+	local recommended = 512
+	local min_chunk_width = math.max(#search_token-1, 1)
+	local chunk_width = math.max(min_chunk_width, recommended)
+
+	local found = false
+	local last = ""
+	local current = unistd.read(given_pipe, chunk_width)
+	while #current > 0 do
+		local window = last..current
+		if string.find(window, search_token) then
+			found = true
+			break
+		end
+		last = current
+		current = unistd.read(given_pipe, chunk_width)
+	end
+	drain_pipe(given_pipe)
+	return found
+end
+
+-- Check if the given command exits cleanly and if its stdout contains expected_string
+-- cmd_table is expected to be suited for pexec
+-- expected_string can be any string (even empty) and is checked to exist in stdout
+-- to_stdin is an optional string that gets fed to stdin of the process
+-- Return true only if nothing went wrong.
+local function check_command(cmd_table, expected_string, to_stdin)
+	local pid, stdin, stdout = popen2(cmd_table[0], cmd_table)
+
+	if pid < 0 then
+		return false
+	end
+
+	if to_stdin then
+		unistd.write(stdin, to_stdin)
+	end
+	unistd.close(stdin)
+
+	local read_something = stream_search(stdout, expected_string)
+
+	local wpid, status, code = wait.wait(pid)
+	return read_something and wpid and status == 'exited' and code == 0
+end
+
+local function has_batman_neighbours()
+	local neighbourcmd = {[0] = 'batctl', 'n', '-H'}
+	return check_command(neighbourcmd, "")
+end
+
+local function has_babel_neighbours()
+	local socket_command = {[0] = 'nc', '::1', '33123'}
+	return check_command(socket_command, "add neighbour", "dump\n")
+end
+
+local function has_v6_default()
+	local handle = io.popen("ip -6 r")
+	if not handle then
+		return false
+	end
+	for line in handle:lines() do
+		if line:find("default") then
+			handle:close()
+			return true
+		end
+	end
+	handle:close()
+	return false
+end
+
+local function has_v4_default()
+	local handle = io.popen("ip -4 r")
+	if not handle then
+		return false
+	end
+	for line in handle:lines() do
+		if line:find("default") then
+			handle:close()
+			return true
+		end
+	end
+	handle:close()
+	return false
+end
+
+local function set_flag(stateflag, state)
+	if state then
+		-- this does not modify atime
+		local flaghandle = io.open(stateflag, "w")
+		flaghandle:close()
+	else
+		os.remove(stateflag)
+	end
+end
+
+-- ensure state path exists
+if not unistd.access(state_dir) then
+	stat.mkdir(state_dir)
+end
+
+local has_neighbours = has_batman_neighbours() or has_babel_neighbours()
+
+local v4_default = has_v4_default()
+local v6_default = has_v6_default()
+
+print("\thas_neighbours:  " .. tostring(has_neighbours))
+print("\thas_default_gw4: " .. tostring(v4_default))
+print("\thas_default_gw6: " .. tostring(v6_default))
+
+set_flag(neighbour_flag, has_neighbours)
+set_flag(route4_flag, v4_default)
+set_flag(route6_flag, v6_default)
