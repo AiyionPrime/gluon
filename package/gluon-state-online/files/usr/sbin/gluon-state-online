@@ -4,6 +4,7 @@ local unistd = require 'posix.unistd'
 local stat = require 'posix.sys.stat'
 local posix_fcntl = require 'posix.fcntl'
 local wait = require 'posix.sys.wait'
+local util = require 'gluon.util'
 
 local state_dir = "/var/gluon/state/"
 
@@ -11,39 +12,75 @@ local neighbour_flag = state_dir .. "has_neighbours"
 local route4_flag    = state_dir .. "default_route_4"
 local route6_flag    = state_dir .. "default_route_6"
 
--- this function will be gone soon
-local function popen2(path, ...)
-	local r0, w0 = unistd.pipe()
-	local r1, w1 = unistd.pipe()
+-- this enum & function will be gone soon
+local PipePolicies = {
+	DISCARD=-1,
+	INHERIT=0,
+	CREATE=1
+}
+
+-- Execute a program found using command PATH search, like the shell.
+-- Return the pid, as well as the I/O streams as pipes or nil on error.
+local function popen3(policies, path, ...)
+	local pipes = {}
+	local intern = {}
+	local extern = {}
+
+	for fd, policy in pairs(policies) do
+		if PipePolicies.CREATE==policy then
+			pipes[fd]={unistd.pipe()}
+			if unistd.STDIN_FILENO==fd then
+				intern[fd]=pipes[fd][1]
+				extern[fd]=pipes[fd][2]
+			else
+				intern[fd]=pipes[fd][2]
+				extern[fd]=pipes[fd][1]
+			end
+		end
+	end
+
+	-- intern: r0, w1, w2
+	-- extern: w0, r1, r2
 
 	local pid = unistd.fork()
 
 	if pid < 0 then
 		return nil
 	elseif pid == 0 then
-		unistd.close(w0)
-		unistd.close(r1)
+		local null=-1;
+		if util.contains(policies, PipePolicies.DISCARD) then
+			-- only open, if there's anything to discard
+			null = posix_fcntl.open('/dev/null', posix_fcntl.O_WRONLY)
+		end
 
-		local null = posix_fcntl.open('/dev/null', posix_fcntl.O_WRONLY)
-		unistd.dup2(null, unistd.STDERR_FILENO)
+		for fd, policy in pairs(policies) do
+			if PipePolicies.DISCARD==policy then
+				if unistd.STDIN_FILENO~=fd then
+					unistd.dup2(null, fd)
+				end
+			elseif PipePolicies.CREATE==policy then
+				-- only close these, if they exist
+				unistd.close(extern[fd])
+				unistd.dup2(intern[fd], fd)
+				-- close all the dups
+				unistd.close(intern[fd])
+			end
+		end
+
+		-- close potential null
 		if null > 2 then
 			unistd.close(null)
 		end
-
-		unistd.dup2(r0, unistd.STDIN_FILENO)
-		unistd.dup2(w1, unistd.STDOUT_FILENO)
-
-		unistd.close(r0)
-		unistd.close(w1)
 
 		unistd.execp(path, ...)
 		unistd._exit(127)
 	end
 
-	unistd.close(r0)
-	unistd.close(w1)
+	for _, v in pairs(intern) do
+		unistd.close(v)
+	end
 
-	return pid, w0, r1
+	return pid, extern
 end
 
 -- Consume and close the given pipe.
@@ -85,7 +122,12 @@ end
 -- to_stdin is an optional string that gets fed to stdin of the process
 -- Return true only if nothing went wrong.
 local function check_command(cmd_table, expected_string, to_stdin)
-	local pid, stdin, stdout = popen2(cmd_table[0], cmd_table)
+	local policies = {[unistd.STDIN_FILENO]=PipePolicies.CREATE,
+			  [unistd.STDOUT_FILENO]=PipePolicies.CREATE,
+			  [unistd.STDERR_FILENO]=PipePolicies.DISCARD}
+	local pid, pipes = popen3(policies, cmd_table[0], cmd_table)
+	local stdin = pipes[unistd.STDIN_FILENO]
+	local stdout = pipes[unistd.STDOUT_FILENO]
 
 	if pid < 0 then
 		return false
