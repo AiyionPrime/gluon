@@ -7,11 +7,12 @@ include ../gluon.mk
 
 define Package/$(PKG_NAME)
   TITLE:=Provides info about the routers online state
-  DEPENDS:=+gluon-core
+  DEPENDS:=+gluon-core +micrond
 endef
 
 define Package/$(PKG_NAME)/description
   This script runs several checks and provides the results as flags in `/var/gluon/state`.
+  It is called by micron.d once every minute.
   A flag exists in case of its description being true and gets removed otherwise.
   The flags get opened regardless them being changed.
 
