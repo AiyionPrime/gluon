@@ -17,8 +17,6 @@ define Package/$(PKG_NAME)/description
   The flags get opened regardless them being changed.
 
   Currently available flags:
-    has_neighbours
-      whether the node has any mesh neighbours (supports both babel and batman)
     has_default_gw4
     has_default_gw6
       whether the router has a default route given the IP version
